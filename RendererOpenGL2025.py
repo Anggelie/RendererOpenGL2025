@@ -79,6 +79,14 @@ while isRunning:
 				currFragmentShader = magma_shader
 				rend.SetShaders(currVertexShader, currFragmentShader)
 
+			if event.key == pygame.K_5:
+				currFragmentShader = sepia_shader
+				rend.SetShaders(currVertexShader, currFragmentShader)
+
+			if event.key == pygame.K_6:
+				currFragmentShader = normal_visualization_shader
+				rend.SetShaders(currVertexShader, currFragmentShader)
+
 
 			if event.key == pygame.K_7:
 				currVertexShader = vertex_shader

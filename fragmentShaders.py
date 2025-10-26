@@ -103,5 +103,56 @@ void main()
 '''
 
 
+sepia_shader = '''
+#version 330 core
+
+in vec2 fragTexCoords;
+in vec3 fragNormal;
+in vec4 fragPosition;
+
+out vec4 fragColor;
+
+uniform sampler2D tex0;
+
+void main()
+{
+    vec4 color = texture(tex0, fragTexCoords);
+    float r = color.r;
+    float g = color.g;
+    float b = color.b;
+
+    // Sepia tone
+    float sr = min(1.0, r * 0.393 + g * 0.769 + b * 0.189);
+    float sg = min(1.0, r * 0.349 + g * 0.686 + b * 0.168);
+    float sb = min(1.0, r * 0.272 + g * 0.534 + b * 0.131);
+
+    fragColor = vec4(sr, sg, sb, color.a);
+}
+
+'''
+
+
+normal_visualization_shader = '''
+#version 330 core
+
+in vec2 fragTexCoords;
+in vec3 fragNormal;
+in vec4 fragPosition;
+
+out vec4 fragColor;
+
+uniform sampler2D tex0;
+
+void main()
+{
+    // visualize normals in world/model space (mapped from -1..1 to 0..1)
+    vec3 n = normalize(fragNormal);
+    vec3 color = n * 0.5 + 0.5;
+    fragColor = vec4(color, 1.0);
+}
+
+'''
+
+
 
 
