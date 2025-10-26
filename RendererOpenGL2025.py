@@ -38,12 +38,12 @@ skyboxTextures = ["skybox/right.jpg",
 rend.CreateSkybox(skyboxTextures)
 
 
-faceModel = Model("models/model.obj")
-faceModel.AddTexture("textures/model.bmp")
-faceModel.AddTexture("textures/lava_cracks.jpg")
-faceModel.position.z = -5
+nijntjeModel = Model("models/Nijntje.obj")
+# Las texturas se cargarán según el archivo .mtl
+nijntjeModel.position.z = -5
+nijntjeModel.scale = glm.vec3(0.5, 0.5, 0.5)  # Ajusta la escala si es necesario
 
-rend.scene.append(faceModel)
+rend.scene.append(nijntjeModel)
 
 isRunning = True
 
