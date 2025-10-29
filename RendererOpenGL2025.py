@@ -40,8 +40,8 @@ rend.CreateSkybox(skyboxTextures)
 
 nijntjeModel = Model("models/Nijntje.obj")
 # Las texturas se cargarán según el archivo .mtl
-nijntjeModel.position.z = -5
-nijntjeModel.scale = glm.vec3(0.5, 0.5, 0.5)  # Ajusta la escala si es necesario
+nijntjeModel.position.z = -5  # Ajusta la distancia
+nijntjeModel.scale = glm.vec3(0.5, 0.5, 0.5)  # Ajusta el tamaño
 
 rend.scene.append(nijntjeModel)
 
@@ -144,7 +144,7 @@ while isRunning:
 
 
 
-	faceModel.rotation.y += 45 * deltaTime
+	nijntjeModel.rotation.y += 45 * deltaTime
 
 
 	rend.Render()
