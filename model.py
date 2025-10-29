@@ -50,9 +50,20 @@ class Model(object):
 			faceNormals = []
 
 			for i in range(len(face)):
+				# Siempre hay vértices
 				facePositions.append( self.objFile.vertices [ face[i][0] - 1 ] )
-				faceTexCoords.append( self.objFile.texCoords[ face[i][1] - 1 ] )
-				faceNormals.append( self.objFile.normals[ face[i][2] - 1 ] )
+				
+				# Coordenadas de textura si existen (índice 1)
+				if len(face[i]) > 1:
+					faceTexCoords.append( self.objFile.texCoords[ face[i][1] - 1 ] )
+				else:
+					faceTexCoords.append( [0.0, 0.0] )  # UV por defecto
+					
+				# Normales si existen (índice 2)
+				if len(face[i]) > 2 and len(self.objFile.normals) > 0:
+					faceNormals.append( self.objFile.normals[ face[i][2] - 1 ] )
+				else:
+					faceNormals.append( [0.0, 1.0, 0.0] )  # Normal por defecto hacia arriba
 
 
 			for value in facePositions[0]: positions.append(value)
@@ -91,25 +102,49 @@ class Model(object):
 
 
 	def AddTexture(self, filename):
-		textureSurface = pygame.image.load(filename)
-		textureData = pygame.image.tostring(textureSurface, "RGB", True)
+		# Cargar la textura detectando si tiene alpha (RGBA) o no (RGB)
+		try:
+			textureSurface = pygame.image.load(filename)
+			# Determinar formato según bits por píxel
+			bits = textureSurface.get_bitsize()
+			has_alpha = (bits == 32)
+			mode = "RGBA" if has_alpha else "RGB"
+			glFormat = GL_RGBA if has_alpha else GL_RGB
 
-		texture = glGenTextures(1)
-		glBindTexture(GL_TEXTURE_2D, texture)
+			textureData = pygame.image.tostring(textureSurface, mode, True)
 
-		glTexImage2D(GL_TEXTURE_2D,
-					 0,
-					 GL_RGB,
-					 textureSurface.get_width(),
-					 textureSurface.get_height(),
-					 0,
-					 GL_RGB,
-					 GL_UNSIGNED_BYTE,
-					 textureData)
+			texture = glGenTextures(1)
+			glBindTexture(GL_TEXTURE_2D, texture)
 
-		glGenerateMipmap(GL_TEXTURE_2D)
+			# Alinear a 1 byte para evitar problemas si width*bytesPerPixel no es múltiplo de 4
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
 
-		self.textures.append(texture)
+			glTexImage2D(GL_TEXTURE_2D,
+					  0,
+					  glFormat,
+					  textureSurface.get_width(),
+					  textureSurface.get_height(),
+					  0,
+					  glFormat,
+					  GL_UNSIGNED_BYTE,
+					  textureData)
+
+			# Restaurar alineación por defecto
+			glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
+
+			# Parámetros de textura razonables
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+
+			glGenerateMipmap(GL_TEXTURE_2D)
+
+			self.textures.append(texture)
+
+		except Exception as e:
+			print(f"Error cargando textura '{filename}': {e}")
+			raise
 
 
 	def Render(self):
