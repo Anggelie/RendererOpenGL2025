@@ -1,171 +1,176 @@
-from OpenGL.GL import *
-from obj import Obj
-from buffer import Buffer
-
-import glm
+from __future__ import annotations
 
 import pygame
+from OpenGL.GL import *
+import glm
+import numpy as np
+import ctypes
+
+from obj import Obj
+
 
 class Model(object):
-	def __init__(self, filename):
-		self.objFile = Obj(filename)
+    def __init__(self, objPath: str):
+        # Transformaciones
+        self.position = glm.vec3(0.0, 0.0, -5.0)
+        self.rotation = glm.vec3(0.0, 0.0, 0.0)  # Euler (pitch, yaw, roll) en radianes
+        self.scale    = glm.vec3(1.0, 1.0, 1.0)
 
-		self.position = glm.vec3(0,0,0)
-		self.rotation = glm.vec3(0,0,0)
-		self.scale = glm.vec3(1,1,1)
+        # Texturas (el renderer espera una lista)
+        self.textureId = None
+        self.textures: list[int] = []
 
-		self.BuildBuffers()
+        # Cargar OBJ (parser ya triangula y expande)
+        self.objFile = Obj(objPath)
 
-		self.textures = []
+        # GPU buffers
+        self.vao = 0
+        self.vbo = 0
+        self.ebo = 0
+        self.vertex_count = 0
+        self.index_count  = 0
 
-	def GetModelMatrix(self):
+        self._has_uv = False
+        self._has_normals = False
 
-		identity = glm.mat4(1)
+        self._BuildBuffers()
 
-		translateMat = glm.translate(identity, self.position)
+    # --------------- Matrices ---------------
+    def GetModel(self):
+        return self.GetModelMatrix()
 
-		pitchMat = glm.rotate(identity, glm.radians(self.rotation.x), glm.vec3(1,0,0))
-		yawMat =   glm.rotate(identity, glm.radians(self.rotation.y), glm.vec3(0,1,0))
-		rollMat =  glm.rotate(identity, glm.radians(self.rotation.z), glm.vec3(0,0,1))
+    def GetModelMatrix(self):
+        # M = T * Rz * Ry * Rx * S  (recibe rotación en grados)
+        T  = glm.translate(glm.mat4(1.0), self.position)
+        Rx = glm.rotate(glm.mat4(1.0), glm.radians(self.rotation.x), glm.vec3(1, 0, 0))
+        Ry = glm.rotate(glm.mat4(1.0), glm.radians(self.rotation.y), glm.vec3(0, 1, 0))
+        Rz = glm.rotate(glm.mat4(1.0), glm.radians(self.rotation.z), glm.vec3(0, 0, 1))
+        S  = glm.scale(glm.mat4(1.0), self.scale)
+        return T * Rz * Ry * Rx * S
 
-		rotationMat = pitchMat * yawMat * rollMat
+    def SetScale(self, s):
+        if isinstance(s, (int, float)):
+            self.scale = glm.vec3(s, s, s)
+        else:
+            self.scale = glm.vec3(s[0], s[1], s[2])
 
-		scaleMat = glm.scale(identity, self.scale)
+    def SetRotation(self, r):
+        self.rotation = glm.vec3(r[0], r[1], r[2])
 
-		return translateMat * rotationMat * scaleMat
+    def SetPosition(self, p):
+        self.position = glm.vec3(p[0], p[1], p[2])
 
+    # --------------- Texturas ---------------
+    def AddTexture(self, path: str):
+        surf = pygame.image.load(path)
+        surf = pygame.transform.flip(surf, False, True)  # flip vertical para coords de OpenGL
 
-	def BuildBuffers(self):
+        img_data = pygame.image.tostring(surf, "RGBA", True)
+        w, h = surf.get_size()
 
-		positions = []
-		texCoords = []
-		normals = []
+        self.textureId = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, self.textureId)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
+        glGenerateMipmap(GL_TEXTURE_2D)
 
-		self.vertexCount = 0
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
 
-		for face in self.objFile.faces:
+        # compatibilidad con Renderer (usa model.textures[0])
+        if self.textureId not in self.textures:
+            self.textures.append(self.textureId)
 
-			facePositions = []
-			faceTexCoords = []
-			faceNormals = []
+        glBindTexture(GL_TEXTURE_2D, 0)
 
-			for i in range(len(face)):
-				# Siempre hay vértices
-				facePositions.append( self.objFile.vertices [ face[i][0] - 1 ] )
-				
-				# Coordenadas de textura si existen (índice 1)
-				if len(face[i]) > 1:
-					faceTexCoords.append( self.objFile.texCoords[ face[i][1] - 1 ] )
-				else:
-					faceTexCoords.append( [0.0, 0.0] )  # UV por defecto
-					
-				# Normales si existen (índice 2)
-				if len(face[i]) > 2 and len(self.objFile.normals) > 0:
-					faceNormals.append( self.objFile.normals[ face[i][2] - 1 ] )
-				else:
-					faceNormals.append( [0.0, 1.0, 0.0] )  # Normal por defecto hacia arriba
+    # --------------- Render ---------------
+    def Render(self):
+        # El Renderer ya activa shader, setea matrices y texturas si existen.
+        glBindVertexArray(self.vao)
+        if self.index_count > 0:
+            glDrawElements(GL_TRIANGLES, self.index_count, GL_UNSIGNED_INT, None)
+        else:
+            glDrawArrays(GL_TRIANGLES, 0, self.vertex_count)
+        glBindVertexArray(0)
 
+    # --------------- Interno: buffers ---------------
+    def _BuildBuffers(self):
+        # Datos EXPANDIDOS del parser
+        verts_orig = self.objFile.vertices
+        pos_exp    = list(self.objFile.positions)
+        uv_exp     = list(self.objFile.uvs)
+        nrm_exp    = list(self.objFile.norms)
 
-			for value in facePositions[0]: positions.append(value)
-			for value in facePositions[1]: positions.append(value)
-			for value in facePositions[2]: positions.append(value)
+        self._has_uv      = len(uv_exp)  == len(pos_exp) and len(uv_exp)  > 0
+        self._has_normals = len(nrm_exp) == len(pos_exp) and len(nrm_exp) > 0
 
-			for value in faceTexCoords[0]: texCoords.append(value)
-			for value in faceTexCoords[1]: texCoords.append(value)
-			for value in faceTexCoords[2]: texCoords.append(value)
+        # Centrar y escalar por AABB de vértices originales
+        positions_np = np.array(verts_orig, dtype=np.float32) if len(verts_orig) > 0 else np.zeros((1,3), np.float32)
+        bb_min = positions_np.min(axis=0)
+        bb_max = positions_np.max(axis=0)
+        center = (bb_min + bb_max) * 0.5
+        extent = (bb_max - bb_min)
+        largest = float(max(extent[0], extent[1], extent[2], 1e-6))
 
-			for value in faceNormals[0]: normals.append(value)
-			for value in faceNormals[1]: normals.append(value)
-			for value in faceNormals[2]: normals.append(value)
+        desired = 1.5
+        scale_factor = desired / largest
 
-			self.vertexCount += 3
+        pos_centered = []
+        for (px, py, pz) in pos_exp:
+            cx = (px - center[0]) * scale_factor
+            cy = (py - center[1]) * scale_factor
+            cz = (pz - center[2]) * scale_factor
+            pos_centered.append((cx, cy, cz))
 
-			if len(face) == 4:
-				for value in facePositions[0]: positions.append(value)
-				for value in facePositions[2]: positions.append(value)
-				for value in facePositions[3]: positions.append(value)
+        # Empaquetar interleaved: P [T] [N]
+        vertex_stride_floats = 3 + (2 if self._has_uv else 0) + (3 if self._has_normals else 0)
+        packed = []
+        for i in range(len(pos_centered)):
+            px, py, pz = pos_centered[i]
+            packed.extend([px, py, pz])
+            if self._has_uv:
+                u, v = uv_exp[i]
+                packed.extend([u, v])
+            if self._has_normals:
+                nx, ny, nz = nrm_exp[i]
+                packed.extend([nx, ny, nz])
 
-				for value in faceTexCoords[0]: texCoords.append(value)
-				for value in faceTexCoords[2]: texCoords.append(value)
-				for value in faceTexCoords[3]: texCoords.append(value)
+        data = np.array(packed, dtype=np.float32)
+        self.vertex_count = len(pos_centered)
+        self.index_count = 0
 
-				for value in faceNormals[0]: normals.append(value)
-				for value in faceNormals[2]: normals.append(value)
-				for value in faceNormals[3]: normals.append(value)
+        # Subir a GPU
+        self.vao = glGenVertexArrays(1)
+        glBindVertexArray(self.vao)
 
-				self.vertexCount += 3
+        self.vbo = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_STATIC_DRAW)
 
+        stride_bytes = vertex_stride_floats * 4
 
-		self.posBuffer = Buffer(positions)
-		self.texCoordsBuffer = Buffer(texCoords)
-		self.normalsBuffer = Buffer(normals)
+        # location 0: position
+        glEnableVertexAttribArray(0)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride_bytes, ctypes.c_void_p(0))
 
+        offset = 3 * 4
+        # location 1: texcoord
+        if self._has_uv:
+            glEnableVertexAttribArray(1)
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride_bytes, ctypes.c_void_p(offset))
+            offset += 2 * 4
 
-	def AddTexture(self, filename):
-		# Cargar la textura detectando si tiene alpha (RGBA) o no (RGB)
-		try:
-			textureSurface = pygame.image.load(filename)
-			# Determinar formato según bits por píxel
-			bits = textureSurface.get_bitsize()
-			has_alpha = (bits == 32)
-			mode = "RGBA" if has_alpha else "RGB"
-			glFormat = GL_RGBA if has_alpha else GL_RGB
+        # location 2: normal
+        if self._has_normals:
+            glEnableVertexAttribArray(2)
+            glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride_bytes, ctypes.c_void_p(offset))
 
-			textureData = pygame.image.tostring(textureSurface, mode, True)
+        glBindVertexArray(0)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
 
-			texture = glGenTextures(1)
-			glBindTexture(GL_TEXTURE_2D, texture)
-
-			# Alinear a 1 byte para evitar problemas si width*bytesPerPixel no es múltiplo de 4
-			glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-
-			glTexImage2D(GL_TEXTURE_2D,
-					  0,
-					  glFormat,
-					  textureSurface.get_width(),
-					  textureSurface.get_height(),
-					  0,
-					  glFormat,
-					  GL_UNSIGNED_BYTE,
-					  textureData)
-
-			# Restaurar alineación por defecto
-			glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
-
-			# Parámetros de textura razonables
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR)
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-
-			glGenerateMipmap(GL_TEXTURE_2D)
-
-			self.textures.append(texture)
-
-		except Exception as e:
-			print(f"Error cargando textura '{filename}': {e}")
-			raise
-
-
-	def Render(self):
-
-		# Dar la textura
-		for i in range(len(self.textures)):
-			glActiveTexture(GL_TEXTURE0 + i)
-			glBindTexture(GL_TEXTURE_2D, self.textures[i])
-
-
-		self.posBuffer.Use(0, 3)
-		self.texCoordsBuffer.Use(1, 2)
-		self.normalsBuffer.Use(2, 3)
-
-
-		glDrawArrays(GL_TRIANGLES, 0, self.vertexCount)
-
-		glDisableVertexAttribArray(0)
-		glDisableVertexAttribArray(1)
-		glDisableVertexAttribArray(2)
-
-
-
-
+        # Info útil en consola
+        try:
+            print(f"Model: vertices={self.vertex_count}, has_uv={self._has_uv}, has_normals={self._has_normals}")
+        except Exception:
+            pass

@@ -1,100 +1,109 @@
-import glm # pip install PyGLM
+"""
+OpenGL renderer glue: manages active program, camera uniforms,
+scene draw, and skybox. Clean prints and time uniform support.
+"""
+
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
-
-from camera import Camera
+import glm
 from skybox import Skybox
 
-class Renderer(object):
+
+class Renderer:
     def __init__(self, screen):
         self.screen = screen
-        _,_, self.width, self.height = screen.get_rect()
-        
-        glClearColor(0.2, 0.2, 0.2, 1.0)
+        self.width, self.height = screen.get_size()
 
+        glViewport(0, 0, self.width, self.height)
         glEnable(GL_DEPTH_TEST)
-        glViewport(0,0, self.width, self.height)
+        glDepthFunc(GL_LEQUAL)
+        glClearColor(0.2, 0.2, 0.25, 1.0)
 
-        self.camera = Camera(self.width, self.height)
-
+        self.camera = None
         self.scene = []
-        
-
-        self.filledMode = False
-        self.ToggleFilledMode()
-
-        self.activeShader = None
-
         self.skybox = None
 
-        self.pointLight = glm.vec3(0,0,0)
-        self.ambientLight = 0.1
+        self.activeShader = None
+        self.value = 0.0
+        self.elapsedTime = 0.0
+        self.pointLight = glm.vec3(1, 1, 1)
 
+        from camera import Camera
+        self.camera = Camera(self.width, self.height)
 
-        self.value = 0.0;
-        self.elapsedTime = 0.0;
-
-
-
-    def CreateSkybox(self, textureList):
-        self.skybox = Skybox(textureList)
-        self.skybox.cameraRef = self.camera
-
-
-    def ToggleFilledMode(self):
-        self.filledMode = not self.filledMode
-
-        if self.filledMode:
-            glEnable(GL_CULL_FACE)
-            glPolygonMode(GL_FRONT, GL_FILL)
-        else:
-            glDisable(GL_CULL_FACE)
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
-
-
-    def SetShaders(self, vertexShader, fragmentShader):
-        if vertexShader is not None and fragmentShader is not None:
-            self.activeShader = compileProgram( compileShader(vertexShader, GL_VERTEX_SHADER),
-                                                compileShader(fragmentShader, GL_FRAGMENT_SHADER) )
-        else:
+    def SetShaders(self, vertex_shader_source, fragment_shader_source):
+        try:
+            vertex_shader = compileShader(vertex_shader_source, GL_VERTEX_SHADER)
+            fragment_shader = compileShader(fragment_shader_source, GL_FRAGMENT_SHADER)
+            self.activeShader = compileProgram(vertex_shader, fragment_shader)
+            print("✓ Shaders compilados correctamente")
+        except Exception as e:
+            print("✗ Error compilando shaders:", e)
             self.activeShader = None
 
+    def CreateSkybox(self, faces):
+        self.skybox = Skybox(faces)
+        self.skybox.cameraRef = self.camera
+        print("✓ Skybox creado correctamente")
+
+    def ToggleFilledMode(self):
+        polygonMode = glGetIntegerv(GL_POLYGON_MODE)
+        if polygonMode[1] == GL_FILL:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+        else:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
     def Render(self):
-        glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT )
-
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        
         self.camera.Update()
 
-        if self.skybox is not None:
+        # ========== DIBUJAR SKYBOX PRIMERO (al fondo) ==========
+        if self.skybox:
+            # Desactivar escritura en depth buffer para que todo se dibuje "encima"
+            glDepthMask(GL_FALSE)
             self.skybox.Render()
+            glDepthMask(GL_TRUE)
 
+        # ========== DIBUJAR MODELOS (al frente) ==========
+        if not self.activeShader:
+            return
 
-        if self.activeShader is not None:
-            glUseProgram(self.activeShader)
+        # Activar shader y pasar matrices comunes
+        glUseProgram(self.activeShader)
 
-            glUniformMatrix4fv( glGetUniformLocation(self.activeShader, "viewMatrix"),
-                                1, GL_FALSE, glm.value_ptr(self.camera.viewMatrix) )
+        # Tiempo para shaders animados (si se declara)
+        loc_time = glGetUniformLocation(self.activeShader, "uTime")
+        if loc_time != -1:
+            glUniform1f(loc_time, self.elapsedTime)
 
-            glUniformMatrix4fv( glGetUniformLocation(self.activeShader, "projectionMatrix"),
-                                1, GL_FALSE, glm.value_ptr(self.camera.projectionMatrix) )
+        loc_view = glGetUniformLocation(self.activeShader, "viewMatrix")
+        loc_proj = glGetUniformLocation(self.activeShader, "projectionMatrix")
+        glUniformMatrix4fv(loc_view, 1, GL_FALSE, glm.value_ptr(self.camera.viewMatrix))
+        glUniformMatrix4fv(loc_proj, 1, GL_FALSE, glm.value_ptr(self.camera.projectionMatrix))
 
-            glUniform3fv( glGetUniformLocation(self.activeShader, "pointLight"), 1, glm.value_ptr(self.pointLight) )
-            glUniform1f( glGetUniformLocation(self.activeShader, "ambientLight"), self.ambientLight )
+        # Luz y cámara
+        glUniform3f(glGetUniformLocation(self.activeShader, "uLightPos"),
+                    self.pointLight.x, self.pointLight.y, self.pointLight.z)
+        glUniform3f(glGetUniformLocation(self.activeShader, "uViewPos"),
+                    self.camera.position.x, self.camera.position.y, self.camera.position.z)
 
-            glUniform1f( glGetUniformLocation(self.activeShader, "value"), self.value )
-            glUniform1f( glGetUniformLocation(self.activeShader, "time"), self.elapsedTime )
+        # Dibujar cada modelo de la escena
+        for model in self.scene:
+            modelMatrix = model.GetModelMatrix()
+            loc_model = glGetUniformLocation(self.activeShader, "modelMatrix")
+            glUniformMatrix4fv(loc_model, 1, GL_FALSE, glm.value_ptr(modelMatrix))
 
+            # Color base (si no hay textura)
+            glUniform3f(glGetUniformLocation(self.activeShader, "uColor"), 0.85, 0.85, 0.85)
 
-            glUniform1i( glGetUniformLocation(self.activeShader, "tex0"), 0)
-            glUniform1i( glGetUniformLocation(self.activeShader, "tex1"), 1)
+            # Textura (solo si hay UVs)
+            has_tex = (len(model.textures) > 0) and getattr(model, "_has_uv", False)
+            glUniform1i(glGetUniformLocation(self.activeShader, "uHasTexture"), GL_TRUE if has_tex else GL_FALSE)
+            if has_tex:
+                glActiveTexture(GL_TEXTURE0)
+                glBindTexture(GL_TEXTURE_2D, model.textures[0])
+                glUniform1i(glGetUniformLocation(self.activeShader, "uTexture0"), 0)
 
-
-
-        for obj in self.scene:
-
-            if self.activeShader is not None:
-                glUniformMatrix4fv( glGetUniformLocation(self.activeShader, "modelMatrix"),
-                                1, GL_FALSE, glm.value_ptr( obj.GetModelMatrix() ) )
-
-            obj.Render()
-
+            # Dibujar
+            model.Render()
