@@ -78,24 +78,38 @@ def main():
     env.cameraRef = cam
     rend.skybox = env
 
-    # Models (3 OBJs) – centered/scaled by Model
-    models = []
-    model_paths = [
-        os.path.join(LAB09_DIR, "models", "Nijntje.obj"),
-        os.path.join(LAB09_DIR, "models", "plane.obj"),
-        os.path.join(LAB09_DIR, "models", "sphere.obj"),
+    # Model specs: pair each OBJ with an optional texture path.
+    # You can replace paths below with your custom OBJ/texture.
+    model_specs: list[tuple[str, str | None]] = [
+        (os.path.join(LAB09_DIR, "models", "Nijntje.obj"), os.path.join(LAB09_DIR, "textures", "0000.jpg.jpeg")),
+        (os.path.join(LAB09_DIR, "models", "plane.obj"), None),
+        (os.path.join(LAB09_DIR, "models", "sphere.obj"), os.path.join(LAB09_DIR, "textures", "0000.jpg.jpeg")),
     ]
 
-    tex_path = os.path.join(LAB09_DIR, "textures", "0000.jpg.jpeg")
+    # Detectar Pom Pom Purin automáticamente y usarlo como segundo modelo
+    purin_obj = os.path.join(LAB09_DIR, "models", "Pom Pom Purin 5.obj")
+    # Usa una difusa simple; otros mapas del repo no se usan en este renderer
+    purin_tex = os.path.join(LAB09_DIR, "textures", "Body_color_4.png")
+    if os.path.isfile(purin_obj):
+        model_specs[1] = (purin_obj, purin_tex if os.path.isfile(purin_tex) else None)
 
-    for p in model_paths:
-        m = Model(p)
-        m.position = glm.vec3(0.0, 0.0, 0.0)  # orbit camera looks at origin
+    # If a custom OBJ exists at Lab_09/RendererOpenGL2025/models/Custom.obj, include it automatically
+    custom_obj = os.path.join(LAB09_DIR, "models", "Custom.obj")
+    custom_tex = os.path.join(LAB09_DIR, "textures", "Custom.png")
+    if os.path.isfile(custom_obj):
+        model_specs[-1] = (custom_obj, custom_tex if os.path.isfile(custom_tex) else None)
+
+    # Load the models
+    models: list[Model] = []
+    for obj_path, tex in model_specs:
+        m = Model(obj_path)
+        m.position = glm.vec3(0.0, 0.0, 0.0)
         m.scale = glm.vec3(1.0, 1.0, 1.0)
-        try:
-            m.AddTexture(tex_path)
-        except Exception:
-            pass
+        if tex and os.path.isfile(tex):
+            try:
+                m.AddTexture(tex)
+            except Exception:
+                pass
         models.append(m)
 
     active_idx = 0
@@ -156,7 +170,8 @@ def main():
         print(f"Vertex: {name} ({current_vert_idx + 1})")
 
     print("\n=== CONTROLES (Lab 10) ===")
-    print("1/2/3: Cambiar modelo activo")
+    print("W/S: Siguiente/Anterior Modelo (solo uno visible)")
+    print("1-0: Seleccionar Fragment Shader | SHIFT+1-0: Vertex Shader")
     print("N/M: Siguiente/Anterior Fragment Shader")
     print(",/.: Siguiente/Anterior Vertex Shader")
     print("F: Wireframe | I: Info | ESC: Salir")
@@ -188,13 +203,11 @@ def main():
                     print(f"Fragment: {fragment_shaders[current_frag_idx][0]}")
                     print(f"Vertex: {vertex_shaders[current_vert_idx][0]}")
 
-                # Model switching
-                elif event.key == pygame.K_1:
-                    set_active_model(0)
-                elif event.key == pygame.K_2:
-                    set_active_model(1)
-                elif event.key == pygame.K_3:
-                    set_active_model(2)
+                # Model switching with W/S
+                elif event.key == pygame.K_w:
+                    set_active_model(active_idx + 1)
+                elif event.key == pygame.K_s:
+                    set_active_model(active_idx - 1)
 
                 # Shader switching like Lab 09
                 elif event.key == pygame.K_n:
@@ -205,6 +218,28 @@ def main():
                     change_vertex_shader(current_vert_idx - 1)
                 elif event.key == pygame.K_PERIOD:
                     change_vertex_shader(current_vert_idx + 1)
+
+                # Direct shader selection with number keys
+                else:
+                    # Map numeric key -> index 0..9
+                    num_map = {
+                        pygame.K_1: 0,
+                        pygame.K_2: 1,
+                        pygame.K_3: 2,
+                        pygame.K_4: 3,
+                        pygame.K_5: 4,
+                        pygame.K_6: 5,
+                        pygame.K_7: 6,
+                        pygame.K_8: 7,
+                        pygame.K_9: 8,
+                        pygame.K_0: 9,
+                    }
+                    if event.key in num_map:
+                        idx = num_map[event.key]
+                        if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+                            change_vertex_shader(idx)
+                        else:
+                            change_fragment_shader(idx)
 
             # Mouse interactions
             elif event.type == pygame.MOUSEBUTTONDOWN:

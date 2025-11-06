@@ -23,6 +23,6 @@ Controles
 - F: wireframe | I: info | ESC: salir
 
 Notas
-- Se reutiliza el renderer y shaders del Lab 09. El skybox está reimplementado (no el de clase).
+- Se reutiliza el renderer y shaders del Lab 09. 
 - Si VS Code marca importaciones como no resueltas, selecciona el intérprete del venv (Python: Select Interpreter) o reinicia la ventana.
 
