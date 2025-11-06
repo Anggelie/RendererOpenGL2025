@@ -42,7 +42,6 @@ class EnvSkybox:
     def __init__(self, faces: Union[Sequence[str], str]):
         self.cameraRef = None
 
-        # Cube vertices (NDC cube, no indices for simplicity)
         verts = np.array([
             -1.0,  1.0, -1.0,
             -1.0, -1.0, -1.0,
@@ -103,11 +102,9 @@ class EnvSkybox:
             compileShader(_FS, gl.GL_FRAGMENT_SHADER)
         )
 
-        # Cubemap texture
         self.cubemap = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, self.cubemap)
         gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-        # Allow: 6 separate files OR a single atlas (3x2 grid: [L, U, R] / [D, F, B])
         file_list: List[str]
         if isinstance(faces, (list, tuple)) and len(faces) == 6:
             file_list = list(faces)
@@ -127,19 +124,13 @@ class EnvSkybox:
                 gl.glTexImage2D(gl.GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.GL_RGB,
                                 target, target, 0, gl.GL_RGB, gl.GL_UNSIGNED_BYTE, data)
         else:
-            # Treat as atlas path (string or [single])
             atlas_path = faces[0] if isinstance(faces, (list, tuple)) else faces
             surf = pygame.image.load(atlas_path)
             w, h = surf.get_width(), surf.get_height()
             cell_w, cell_h = w // 3, h // 2
-            face = min(cell_w, cell_h)  # cubemap faces must be square
-            # Mapping to GL faces: +X, -X, +Y, -Y, +Z, -Z
-            # Atlas assumed layout:
-            # top row:  [Left, Up, Right]
-            # bottom:   [Down, Front, Back]
+            face = min(cell_w, cell_h) 
             tiles_xy = [ (2,0), (0,0), (1,0), (0,1), (1,1), (2,1) ]
             for i, (tx, ty) in enumerate(tiles_xy):
-                # center-crop square from each cell to satisfy cubemap requirements
                 base_x, base_y = tx*cell_w, ty*cell_h
                 off_x = (cell_w - face) // 2
                 off_y = (cell_h - face) // 2

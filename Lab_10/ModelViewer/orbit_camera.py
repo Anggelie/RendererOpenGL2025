@@ -6,7 +6,6 @@ class OrbitCamera:
         self.screenWidth = width
         self.screenHeight = height
 
-        # Orbit state
         self.target = glm.vec3(0.0, 0.0, 0.0)
         self.distance = 4.0
         self.min_distance = 1.2
