@@ -4,15 +4,13 @@ import pygame
 from OpenGL import GL as gl
 import glm
 
-# Add Lab_09 module path to import renderer, model, and shaders
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Repo root assumed two levels up from this file
 LAB09_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "Lab_09", "RendererOpenGL2025"))
 if LAB09_DIR not in sys.path:
     sys.path.append(LAB09_DIR)
 
-from gl import Renderer  # type: ignore
-from model import Model  # type: ignore
+from gl import Renderer  
+from model import Model  
 from vertexShaders import (
     vertex_shader,
     water_shader,
@@ -24,7 +22,7 @@ from vertexShaders import (
     melt_shader,
     fat_shader,
     glitch_vertex_shader,
-)  # type: ignore
+)  
 from fragmentShaders import (
     fragment_shader,
     toon_shader,
@@ -36,12 +34,12 @@ from fragmentShaders import (
     wireframe_shader,
     matrix_shader,
     disco_shader,
-)  # type: ignore
+)  
 
 from orbit_camera import OrbitCamera
 from env_skybox import EnvSkybox
-from postprocess import PostProcessor  # type: ignore
-from post_shaders import POST_EFFECTS  # type: ignore
+from postprocess import PostProcessor 
+from post_shaders import POST_EFFECTS  
 
 
 def main():
@@ -55,22 +53,17 @@ def main():
 
     rend = Renderer(screen)
 
-    # Replace default camera with orbit camera focusing the model at origin
     cam = OrbitCamera(width, height)
     rend.camera = cam
 
     # Light
     rend.pointLight = glm.vec3(2.0, 2.0, 2.0)
 
-    # Shaders from Lab 09
     currVertexShader = vertex_shader
     currFragmentShader = fragment_shader
     rend.SetShaders(currVertexShader, currFragmentShader)
 
-    # Skybox (custom implementation, not the class from Lab 09)
-    # Preferir un atlas 3x2 si existe (skybox/custom_atlas.* o atlas.*)
     _SKY = os.path.join(LAB09_DIR, "skybox")
-    # Intentar 6 archivos primero (cualquier extensión)
     def _find_face(name: str):
         for ext in ("png", "jpg", "jpeg"):
             p = os.path.join(_SKY, f"{name}.{ext}")
@@ -95,7 +88,6 @@ def main():
         if atlas_path:
             env = EnvSkybox(atlas_path)
         else:
-            # Fallback a nombres por defecto .jpg
             skybox_textures = [
                 os.path.join(_SKY, "right.jpg"),
                 os.path.join(_SKY, "left.jpg"),
@@ -108,32 +100,25 @@ def main():
     env.cameraRef = cam
     rend.skybox = env
 
-    # Post-process pipeline
     postfx = PostProcessor(width, height)
     rend.postprocess = postfx
 
-    # Model specs: pair each OBJ with an optional texture path.
-    # You can replace paths below with your custom OBJ/texture.
     model_specs: list[tuple[str, str | None]] = [
         (os.path.join(LAB09_DIR, "models", "Nijntje.obj"), os.path.join(LAB09_DIR, "textures", "0000.jpg.jpeg")),
         (os.path.join(LAB09_DIR, "models", "plane.obj"), None),
         (os.path.join(LAB09_DIR, "models", "sphere.obj"), os.path.join(LAB09_DIR, "textures", "0000.jpg.jpeg")),
     ]
 
-    # Detectar Pom Pom Purin automáticamente y usarlo como segundo modelo
     purin_obj = os.path.join(LAB09_DIR, "models", "Pom Pom Purin 5.obj")
-    # Usa una difusa simple; otros mapas del repo no se usan en este renderer
     purin_tex = os.path.join(LAB09_DIR, "textures", "Body_color_4.png")
     if os.path.isfile(purin_obj):
         model_specs[1] = (purin_obj, purin_tex if os.path.isfile(purin_tex) else None)
 
-    # If a custom OBJ exists at Lab_09/RendererOpenGL2025/models/Custom.obj, include it automatically
     custom_obj = os.path.join(LAB09_DIR, "models", "Custom.obj")
     custom_tex = os.path.join(LAB09_DIR, "textures", "Custom.png")
     if os.path.isfile(custom_obj):
         model_specs[-1] = (custom_obj, custom_tex if os.path.isfile(custom_tex) else None)
 
-    # Load the models
     models: list[Model] = []
     for obj_path, tex in model_specs:
         m = Model(obj_path)
@@ -152,12 +137,10 @@ def main():
         nonlocal active_idx
         active_idx = idx % len(models)
         rend.scene = [models[active_idx]]
-        # Reset camera target (center) and keep distance
         cam.target = glm.vec3(0.0, 0.0, 0.0)
 
     set_active_model(0)
 
-    # Shader lists for cycling like Lab 09
     fragment_shaders = [
         ("Phong", fragment_shader),
         ("Toon", toon_shader),
@@ -213,11 +196,9 @@ def main():
     print("Cámara (teclado): Flechas izquierda/derecha (órbita), flechas arriba/abajo (elevación), Q/E o Rueda (zoom)")
     print("Cámara (mouse): Arrastrar botón izq. (órbita/elevación), rueda (zoom)")
 
-    # Mouse state for orbit
     rotating = False
     last_mouse = (0, 0)
 
-    # Postprocess effects list
     post_effects = POST_EFFECTS
     post_idx = 0
     postfx.set_effect(post_effects[post_idx][1])
@@ -244,13 +225,11 @@ def main():
                     print(f"Fragment: {fragment_shaders[current_frag_idx][0]}")
                     print(f"Vertex: {vertex_shaders[current_vert_idx][0]}")
 
-                # Model switching with W/S
                 elif event.key == pygame.K_w:
                     set_active_model(active_idx + 1)
                 elif event.key == pygame.K_s:
                     set_active_model(active_idx - 1)
 
-                # Shader switching like Lab 09
                 elif event.key == pygame.K_n:
                     change_fragment_shader(current_frag_idx + 1)
                 elif event.key == pygame.K_m:
@@ -260,9 +239,7 @@ def main():
                 elif event.key == pygame.K_PERIOD:
                     change_vertex_shader(current_vert_idx + 1)
 
-                # Direct shader selection with number keys
                 else:
-                    # Map numeric key -> index 0..9
                     num_map = {
                         pygame.K_1: 0,
                         pygame.K_2: 1,
@@ -282,7 +259,6 @@ def main():
                         else:
                             change_fragment_shader(idx)
                 
-                # Postprocess switching Z/X
                 if event.key == pygame.K_z:
                     post_idx = (post_idx - 1) % len(post_effects)
                     postfx.set_effect(post_effects[post_idx][1])
@@ -292,14 +268,13 @@ def main():
                     postfx.set_effect(post_effects[post_idx][1])
                     print(f"PostFX: {post_effects[post_idx][0]}")
 
-            # Mouse interactions
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     rotating = True
                     last_mouse = event.pos
-                elif event.button == 4:  # wheel up
+                elif event.button == 4:  
                     cam.zoom(-1.0)
-                elif event.button == 5:  # wheel down
+                elif event.button == 5:  
                     cam.zoom(+1.0)
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
@@ -309,12 +284,11 @@ def main():
                 dx = x - last_mouse[0]
                 dy = y - last_mouse[1]
                 last_mouse = (x, y)
-                cam.orbit_by(dx * 0.2, -dy * 0.2)  # sensitivity
+                cam.orbit_by(dx * 0.2, -dy * 0.2)  
 
-        # Keyboard camera control
-        orbit_speed = 60.0  # deg/sec
-        elev_speed = 60.0   # deg/sec
-        zoom_speed = 2.0    # steps/sec
+        orbit_speed = 60.0  
+        elev_speed = 60.0   
+        zoom_speed = 2.0    
 
         if keys[pygame.K_LEFT]:
             cam.azimuth_deg -= orbit_speed * dt
@@ -329,7 +303,6 @@ def main():
         if keys[pygame.K_e]:
             cam.distance = min(cam.max_distance, cam.distance + zoom_speed * dt)
 
-        # Update and render
         cam.Update()
         rend.Render()
         pygame.display.flip()

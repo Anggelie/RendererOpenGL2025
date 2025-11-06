@@ -12,8 +12,8 @@ class OrbitCamera:
         self.min_distance = 1.2
         self.max_distance = 12.0
 
-        self.azimuth_deg = 180.0  # around Y
-        self.elevation_deg = 15.0  # up/down
+        self.azimuth_deg = 180.0  
+        self.elevation_deg = 15.0  
         self.min_elev = -80.0
         self.max_elev = 80.0
 
@@ -32,12 +32,10 @@ class OrbitCamera:
         self.elevation_deg = max(self.min_elev, min(self.max_elev, self.elevation_deg))
 
     def zoom(self, steps: float):
-        # steps > 0 means zoom out
         self.distance += steps * 0.25
         self.distance = max(self.min_distance, min(self.max_distance, self.distance))
 
     def Update(self):
-        # Convert spherical to Cartesian (Y-up)
         az = glm.radians(self.azimuth_deg)
         el = glm.radians(self.elevation_deg)
         r = self.distance
