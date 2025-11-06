@@ -40,6 +40,8 @@ from fragmentShaders import (
 
 from orbit_camera import OrbitCamera
 from env_skybox import EnvSkybox
+from postprocess import PostProcessor  # type: ignore
+from post_shaders import POST_EFFECTS  # type: ignore
 
 
 def main():
@@ -66,17 +68,49 @@ def main():
     rend.SetShaders(currVertexShader, currFragmentShader)
 
     # Skybox (custom implementation, not the class from Lab 09)
-    skybox_textures = [
-        os.path.join(LAB09_DIR, "skybox", "right.jpg"),
-        os.path.join(LAB09_DIR, "skybox", "left.jpg"),
-        os.path.join(LAB09_DIR, "skybox", "top.jpg"),
-        os.path.join(LAB09_DIR, "skybox", "bottom.jpg"),
-        os.path.join(LAB09_DIR, "skybox", "front.jpg"),
-        os.path.join(LAB09_DIR, "skybox", "back.jpg"),
+    # Preferir un atlas 3x2 si existe (skybox/custom_atlas.* o atlas.*)
+    _SKY = os.path.join(LAB09_DIR, "skybox")
+    # Intentar 6 archivos primero (cualquier extensión)
+    def _find_face(name: str):
+        for ext in ("png", "jpg", "jpeg"):
+            p = os.path.join(_SKY, f"{name}.{ext}")
+            if os.path.isfile(p):
+                return p
+        return None
+    faces = [
+        _find_face("right"), _find_face("left"), _find_face("top"),
+        _find_face("bottom"), _find_face("front"), _find_face("back"),
     ]
-    env = EnvSkybox(skybox_textures)
+    if all(faces):
+        env = EnvSkybox(faces)
+    else:
+        atlas_candidates = [
+            os.path.join(_SKY, "custom_atlas.png"),
+            os.path.join(_SKY, "custom_atlas.jpg"),
+            os.path.join(_SKY, "custom_atlas.jpeg"),
+            os.path.join(_SKY, "atlas.png"),
+            os.path.join(_SKY, "atlas.jpg"),
+        ]
+        atlas_path = next((p for p in atlas_candidates if os.path.isfile(p)), None)
+        if atlas_path:
+            env = EnvSkybox(atlas_path)
+        else:
+            # Fallback a nombres por defecto .jpg
+            skybox_textures = [
+                os.path.join(_SKY, "right.jpg"),
+                os.path.join(_SKY, "left.jpg"),
+                os.path.join(_SKY, "top.jpg"),
+                os.path.join(_SKY, "bottom.jpg"),
+                os.path.join(_SKY, "front.jpg"),
+                os.path.join(_SKY, "back.jpg"),
+            ]
+            env = EnvSkybox(skybox_textures)
     env.cameraRef = cam
     rend.skybox = env
+
+    # Post-process pipeline
+    postfx = PostProcessor(width, height)
+    rend.postprocess = postfx
 
     # Model specs: pair each OBJ with an optional texture path.
     # You can replace paths below with your custom OBJ/texture.
@@ -174,6 +208,7 @@ def main():
     print("1-0: Seleccionar Fragment Shader | SHIFT+1-0: Vertex Shader")
     print("N/M: Siguiente/Anterior Fragment Shader")
     print(",/.: Siguiente/Anterior Vertex Shader")
+    print("Z/X: Siguiente/Anterior Postprocess")
     print("F: Wireframe | I: Info | ESC: Salir")
     print("Cámara (teclado): Flechas izquierda/derecha (órbita), flechas arriba/abajo (elevación), Q/E o Rueda (zoom)")
     print("Cámara (mouse): Arrastrar botón izq. (órbita/elevación), rueda (zoom)")
@@ -181,6 +216,12 @@ def main():
     # Mouse state for orbit
     rotating = False
     last_mouse = (0, 0)
+
+    # Postprocess effects list
+    post_effects = POST_EFFECTS
+    post_idx = 0
+    postfx.set_effect(post_effects[post_idx][1])
+    print(f"PostFX: {post_effects[post_idx][0]}")
 
     is_running = True
     frame = 0
@@ -240,6 +281,16 @@ def main():
                             change_vertex_shader(idx)
                         else:
                             change_fragment_shader(idx)
+                
+                # Postprocess switching Z/X
+                if event.key == pygame.K_z:
+                    post_idx = (post_idx - 1) % len(post_effects)
+                    postfx.set_effect(post_effects[post_idx][1])
+                    print(f"PostFX: {post_effects[post_idx][0]}")
+                elif event.key == pygame.K_x:
+                    post_idx = (post_idx + 1) % len(post_effects)
+                    postfx.set_effect(post_effects[post_idx][1])
+                    print(f"PostFX: {post_effects[post_idx][0]}")
 
             # Mouse interactions
             elif event.type == pygame.MOUSEBUTTONDOWN:
